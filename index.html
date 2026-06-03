@@ -213,18 +213,19 @@
     }
     .sl-ends { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 6px; }
 
-    /* ── STEPPER ── */
-    .stepper { display: flex; align-items: center; justify-content: center; gap: 28px; margin-bottom: 18px; }
-    .st-btn {
-      width: 54px; height: 54px; border-radius: 50%;
-      border: 2px solid var(--teal);
-      background: var(--teal-2); color: var(--teal);
-      font-size: 28px; font-weight: 700; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      transition: opacity .1s;
+    /* ── NUMBER GRID ── */
+    .ngrid { display: grid; grid-template-columns: repeat(5,1fr); gap: 8px; margin-bottom: 10px; }
+    .ngchip {
+      padding: 14px 4px; border: 2px solid var(--border);
+      border-radius: 12px; background: var(--card);
+      font-size: 18px; font-weight: 700; text-align: center;
+      cursor: pointer; touch-action: manipulation; user-select: none;
+      font-family: 'DM Sans', sans-serif; color: var(--text);
+      transition: all .12s;
     }
-    .st-btn:active { opacity: .65; }
-    .st-val { font-family: 'DM Serif Display', serif; font-size: 60px; min-width: 80px; text-align: center; line-height: 1; }
+    .ngchip.sel { border-color: var(--teal); background: var(--teal-2); color: var(--teal); }
+    .ngchip:active { opacity: .7; }
+    .ngwide { grid-column: span 5; }
 
     /* ── TIME ── */
     .t-inp {
@@ -419,8 +420,9 @@ const QS = [
     rate(v){ return v==null?null: v?'green':'none'; }
   },
   { id:'hh_eating', cat:'healthy_habits',
-    text:'Have you eaten healthily today?', type:'yesno',
-    rate(v){ return v==null?null: v?'green':'amber'; }
+    text:'Have you eaten healthily today?', type:'choices',
+    opts:['Yes','Sort of','No'],
+    rate(v){ return v==null?null: v===0?'green':v===1?'none':'amber'; }
   },
 
   /* ── PERIOD ── */
@@ -440,7 +442,7 @@ function catScore(ans, cid){
   let s=0, mx=0;
   for(const q of qs){
     const r = ans[q.id]!==undefined ? q.rate(ans[q.id]) : null;
-    if(r===null) continue;
+    if(r===null || r==='none') continue;
     s += W[r]||0; mx += 2;
   }
   return mx===0 ? 0 : s/mx;
@@ -730,16 +732,17 @@ function renderQ(el){
 
   } else if(q.type==='stepper'){
     const v=cur??0;
-    body=`<div class="stepper">
-      <button class="st-btn" onclick="stepU('${q.id}',-1)">−</button>
-      <div class="st-val" id="sv">${v}</div>
-      <button class="st-btn" onclick="stepU('${q.id}',+1)">+</button>
+    const chips=[0,1,2,3,4,5,6,7,8,9].map(n=>
+      `<button class="ngchip${v===n?' sel':''}" onclick="setA('${q.id}',${n})">${n}</button>`
+    ).join('');
+    body=`<div class="ngrid">${chips}</div>
+    <div class="ngrid" style="margin-bottom:10px">
+      <button class="ngchip ngwide${v>=10?' sel':''}" onclick="setA('${q.id}',10)">10+</button>
     </div>
-    <div style="text-align:center;margin-bottom:20px" id="sb">${badge(q.rate(v))}</div>`;
+    <div style="text-align:center;margin-bottom:20px">${badge(q.rate(v))}</div>`;
 
   } else if(q.type==='time'){
     body=`<input type="time" class="t-inp" value="${cur||''}"
-      oninput="setA('${q.id}',this.value,true)"
       onchange="setA('${q.id}',this.value,true)">
     <div style="text-align:center;margin-bottom:16px;min-height:27px">
       ${cur?badge(q.rate(cur)):''}
@@ -780,7 +783,7 @@ function stepU(id,d){
 function setA(id,v,noAdv){
   qs.ans[id]=v;
   const q=QS[qs.idx];
-  if(!noAdv && (q.type==='yesno'||q.type==='choices')){
+  if(!noAdv && (q.type==='yesno'||q.type==='choices'||q.type==='stepper')){
     setTimeout(()=>{ qs.idx===QS.length-1 ? finishQ() : nextQ(); }, 300);
   } else {
     renderQ(document.getElementById('main'));
