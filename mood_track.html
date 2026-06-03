@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Mood Track">
+  <title>Mood Track</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Serif+Display&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green:    #15803d;
+      --green-bg: #dcfce7;
+      --amber:    #b45309;
+      --amber-bg: #fef3c7;
+      --red:      #b91c1c;
+      --red-bg:   #fee2e2;
+      --teal:     #0d9488;
+      --teal-2:   #ccfbf1;
+      --bg:       #f7f5f2;
+      --card:     #ffffff;
+      --text:     #1c1917;
+      --muted:    #78716c;
+      --border:   #e7e5e0;
+      --r:        16px;
+      --shadow:   0 1px 3px rgba(0,0,0,.07), 0 2px 12px rgba(0,0,0,.04);
+    }
+
+    html, body {
+      height: 100%;
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overscroll-behavior: none;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      max-width: 430px;
+      margin: 0 auto;
+    }
+
+    /* ── HEADER ── */
+    #hdr {
+      background: var(--bg);
+      padding: 14px 18px 10px;
+      padding-top: calc(14px + env(safe-area-inset-top, 0px));
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    #hdr-title {
+      font-family: 'DM Serif Display', serif;
+      font-size: 20px;
+      letter-spacing: -.3px;
+    }
+    #hdr-btn {
+      background: none; border: none;
+      color: var(--teal);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px; font-weight: 600;
+      padding: 6px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      min-height: 36px;
+    }
+    #hdr-btn:active { background: var(--teal-2); }
+
+    /* ── SCROLLABLE MAIN ── */
+    #main {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 8px 16px 16px;
+      padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+    }
+
+    /* ── BOTTOM NAV ── */
+    #nav {
+      background: rgba(247,245,242,.92);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-top: 1px solid var(--border);
+      display: flex;
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+      flex-shrink: 0;
+    }
+    .ntab {
+      flex: 1; background: none; border: none;
+      padding: 10px 8px 7px;
+      display: flex; flex-direction: column;
+      align-items: center; gap: 3px;
+      font-size: 11px; font-weight: 600;
+      color: var(--muted); cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .ntab.on { color: var(--teal); }
+    .ntab svg { width: 22px; height: 22px; stroke-width: 1.8; }
+
+    /* ── CARD ── */
+    .card {
+      background: var(--card);
+      border-radius: var(--r);
+      padding: 16px;
+      margin-bottom: 10px;
+      box-shadow: var(--shadow);
+    }
+
+    /* ── BADGES ── */
+    .badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 11px; border-radius: 20px;
+      font-size: 13px; font-weight: 700;
+      letter-spacing: .01em; white-space: nowrap;
+    }
+    .badge::before { content: ''; width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .bg { background: var(--green-bg); color: var(--green); }
+    .bg::before { background: var(--green); }
+    .ba { background: var(--amber-bg); color: var(--amber); }
+    .ba::before { background: var(--amber); }
+    .br { background: var(--red-bg); color: var(--red); }
+    .br::before { background: var(--red); }
+
+    /* ── BIG RAG BANNER ── */
+    .banner {
+      border-radius: var(--r); padding: 22px 16px;
+      text-align: center; margin-bottom: 10px; color: white;
+    }
+    .banner.green { background: var(--green); }
+    .banner.amber { background: var(--amber); }
+    .banner.red   { background: var(--red); }
+    .banner .bl { font-size: 12px; font-weight: 700; opacity: .8; text-transform: uppercase; letter-spacing: .07em; margin-bottom: 3px; }
+    .banner .bv { font-family: 'DM Serif Display', serif; font-size: 36px; }
+
+    /* ── ROW ── */
+    .row {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      padding: 11px 0;
+      border-bottom: 1px solid var(--border);
+      gap: 8px;
+    }
+    .row:last-child { border-bottom: none; }
+    .row-l { font-size: 15px; flex: 1; }
+    .row-s { font-size: 13px; color: var(--muted); margin-top: 1px; }
+
+    /* ── BUTTONS ── */
+    .btn {
+      display: block; width: 100%; padding: 15px;
+      border: none; border-radius: var(--r);
+      font-size: 16px; font-weight: 700;
+      cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+      transition: opacity .1s, transform .08s;
+    }
+    .btn:active { opacity: .85; transform: scale(.99); }
+    .btn-p { background: var(--teal); color: white; }
+    .btn-g { background: var(--card); border: 2px solid var(--border); color: var(--text); }
+
+    /* ── CHOICE BUTTONS ── */
+    .choices { display: flex; flex-direction: column; gap: 9px; margin-bottom: 22px; }
+    .ch {
+      width: 100%; padding: 15px 18px;
+      border: 2px solid var(--border); border-radius: var(--r);
+      background: var(--card); font-size: 16px;
+      text-align: left; cursor: pointer; color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      transition: all .12s;
+    }
+    .ch.sel { border-color: var(--teal); background: var(--teal-2); color: var(--teal); font-weight: 600; }
+    .ch:active { opacity: .75; }
+
+    /* ── YES / NO ── */
+    .yesno { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 22px; }
+    .yn {
+      padding: 20px 12px;
+      border: 2px solid var(--border); border-radius: var(--r);
+      font-size: 18px; font-weight: 700; cursor: pointer;
+      background: var(--card); color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      transition: all .12s;
+    }
+    .yn.sel { border-color: var(--teal); background: var(--teal-2); color: var(--teal); }
+    .yn:active { opacity: .75; }
+
+    /* ── SLIDER ── */
+    .sl-wrap { margin-bottom: 22px; }
+    .sl-num {
+      font-family: 'DM Serif Display', serif;
+      font-size: 58px; text-align: center;
+      line-height: 1; margin-bottom: 6px;
+    }
+    .sl-badge { text-align: center; min-height: 27px; margin-bottom: 14px; }
+    input[type=range] {
+      width: 100%; -webkit-appearance: none;
+      height: 6px; background: var(--border);
+      border-radius: 3px; outline: none; margin: 4px 0;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 30px; height: 30px;
+      background: var(--teal); border-radius: 50%;
+      box-shadow: 0 2px 8px rgba(13,148,136,.35);
+      cursor: pointer;
+    }
+    .sl-ends { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+    /* ── STEPPER ── */
+    .stepper { display: flex; align-items: center; justify-content: center; gap: 28px; margin-bottom: 18px; }
+    .st-btn {
+      width: 54px; height: 54px; border-radius: 50%;
+      border: 2px solid var(--teal);
+      background: var(--teal-2); color: var(--teal);
+      font-size: 28px; font-weight: 700; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: opacity .1s;
+    }
+    .st-btn:active { opacity: .65; }
+    .st-val { font-family: 'DM Serif Display', serif; font-size: 60px; min-width: 80px; text-align: center; line-height: 1; }
+
+    /* ── TIME ── */
+    .t-inp {
+      display: block; width: 100%; padding: 18px;
+      border: 2px solid var(--border); border-radius: var(--r);
+      font-size: 30px; font-weight: 700; text-align: center;
+      background: var(--card); color: var(--text);
+      margin-bottom: 10px; outline: none;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .t-inp:focus { border-color: var(--teal); }
+
+    /* ── PROGRESS ── */
+    .prog { height: 3px; background: var(--border); border-radius: 2px; margin-bottom: 22px; overflow: hidden; }
+    .prog-f { height: 100%; background: var(--teal); border-radius: 2px; transition: width .3s ease; }
+
+    /* ── QUESTION META ── */
+    .q-num  { font-size: 12px; color: var(--muted); margin-bottom: 4px; font-weight: 600; }
+    .q-cat  { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; }
+    .q-text { font-family: 'DM Serif Display', serif; font-size: 22px; line-height: 1.25; margin-bottom: 26px; }
+
+    /* ── Q NAV ── */
+    .q-nav { display: flex; gap: 10px; }
+    .back-btn {
+      flex-shrink: 0; width: 50px;
+      background: var(--card); border: 2px solid var(--border);
+      border-radius: var(--r); font-size: 18px; cursor: pointer; color: var(--muted);
+    }
+    .back-btn:active { opacity: .6; }
+
+    /* ── HISTORY ── */
+    .h-item {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      padding: 13px 0;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+    }
+    .h-item:last-child { border-bottom: none; }
+    .h-item:active { opacity: .7; }
+    .h-date { font-size: 16px; font-weight: 700; }
+    .h-sub  { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .dot {
+      width: 34px; height: 34px;
+      border-radius: 50%; flex-shrink: 0;
+    }
+    .dot.green { background: var(--green); }
+    .dot.amber { background: var(--amber); }
+    .dot.red   { background: var(--red); }
+
+    /* ── MISC ── */
+    .month-lbl {
+      font-size: 11px; font-weight: 800;
+      text-transform: uppercase; letter-spacing: .08em;
+      color: var(--muted); margin: 16px 0 6px;
+    }
+    .p-flag {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 13px; font-weight: 700;
+      color: #9d174d; background: #fce7f3;
+      padding: 4px 11px; border-radius: 20px; margin-bottom: 10px;
+    }
+    .hint { text-align: center; font-size: 13px; color: var(--muted); margin-top: -14px; margin-bottom: 18px; }
+    .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
+    .empty-i { font-size: 44px; margin-bottom: 12px; }
+    .cat-hdr {
+      font-weight: 800; font-size: 15px; margin-bottom: 12px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .section-lbl {
+      font-size: 12px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .07em;
+      color: var(--muted); margin-bottom: 4px;
+    }
+    .fade { animation: fi .18s ease both; }
+    @keyframes fi { from { opacity:0; transform:translateY(7px); } to { opacity:1; transform:translateY(0); } }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div id="hdr">
+    <span id="hdr-title">Mood Track</span>
+    <button id="hdr-btn" onclick="hdrAct()"></button>
+  </div>
+  <div id="main"></div>
+  <div id="nav">
+    <button class="ntab on" id="tab-home" onclick="goTo('home')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+        <polyline points="9 22 9 12 15 12 15 22"/>
+      </svg>
+      Today
+    </button>
+    <button class="ntab" id="tab-history" onclick="goTo('history')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+      </svg>
+      History
+    </button>
+  </div>
+</div>
+
+<script>
+/* ══════════════════════════════════════
+   DATA
+══════════════════════════════════════ */
+const CATS = {
+  hypomania:     { label:'Hypomania',     col:'#7c3aed' },
+  low_mood:      { label:'Low Mood',       col:'#2563eb' },
+  healthy_habits:{ label:'Healthy Habits', col:'#059669' },
+  period:        { label:'Period',          col:'#db2777' }
+};
+
+const QS = [
+  /* ── HYPOMANIA ── */
+  { id:'h_sleep_time', cat:'hypomania',
+    text:'What time did you go to sleep last night?', type:'time',
+    rate(v){
+      if(!v) return null;
+      const [h,m]=v.split(':').map(Number), t=h*60+m;
+      const eff = h < 6 ? t+1440 : t;          // midnight wrap
+      return eff < 1260 ? 'green' : eff < 1320 ? 'amber' : 'red';
+    }
+  },
+  { id:'h_sleep_q', cat:'hypomania',
+    text:'How did you sleep?', type:'choices',
+    opts:['Fine','Bit disturbed','Lots of wakings'],
+    rate(v){ return v==null?null:['green','amber','red'][v]; }
+  },
+  { id:'h_dc', cat:'hypomania',
+    text:'How many Diet Cokes did you have today?', type:'stepper', min:0, max:20,
+    rate(v){ return v==null?null: v<=4?'green':'amber'; }
+  },
+  { id:'h_coffee', cat:'hypomania',
+    text:'Did you have a coffee today?', type:'yesno',
+    rate(v){ return v==null?null: v?'red':'green'; }
+  },
+  { id:'h_energy', cat:'hypomania',
+    text:'How energetic have you felt today?', type:'slider', min:0, max:10,
+    ends:['No energy','Bursting'],
+    rate(v){ return v==null?null: v<=6?'green':v===7?'amber':'red'; }
+  },
+  { id:'h_prod', cat:'hypomania',
+    text:'How productive have you felt today?', type:'slider', min:0, max:10,
+    ends:['Not at all','Extremely'],
+    rate(v){ return v==null?null: v<=6?'green':v===7?'amber':'red'; }
+  },
+  { id:'h_mess', cat:'hypomania',
+    text:'Are you frustrated by mess today?', type:'yesno',
+    rate(v){ return v==null?null: v?'amber':'green'; }
+  },
+  { id:'h_irritable', cat:'hypomania',
+    text:'Have you felt irritable today?', type:'yesno',
+    rate(v){ return v==null?null: v?'amber':'green'; }
+  },
+  { id:'h_teary', cat:'hypomania',
+    text:'Have you been teary today?', type:'yesno',
+    rate(v){ return v==null?null: v?'red':'green'; }
+  },
+
+  /* ── LOW MOOD ── */
+  { id:'l_dc', cat:'low_mood',
+    text:'How many Diet Cokes did you have today?', type:'stepper', min:0, max:20,
+    rate(v){ return v==null?null: v<=4?'green':'amber'; }
+  },
+  { id:'l_coffee', cat:'low_mood',
+    text:'Did you have a coffee today?', type:'yesno',
+    rate(v){ return v==null?null: v?'red':'green'; }
+  },
+  { id:'l_shower', cat:'low_mood',
+    text:'When did you last shower?', type:'choices',
+    opts:['Today or yesterday','2–3 days ago','4+ days ago'],
+    rate(v){ return v==null?null: ['green','amber','red'][v]; }
+  },
+  { id:'l_irritable', cat:'low_mood',
+    text:'Have you felt irritable today?', type:'yesno',
+    rate(v){ return v==null?null: v?'amber':'green'; }
+  },
+  { id:'l_teary', cat:'low_mood',
+    text:'Have you been teary today?', type:'yesno',
+    rate(v){ return v==null?null: v?'red':'green'; }
+  },
+
+  /* ── HEALTHY HABITS ── */
+  { id:'hh_water', cat:'healthy_habits',
+    text:'How much water have you drunk today?', type:'choices',
+    opts:['Less than 750ml','750ml or more'],
+    rate(v){ return v==null?null: v===0?'amber':'green'; }
+  },
+  { id:'hh_exercise', cat:'healthy_habits',
+    text:'Have you exercised today?', type:'yesno', noScore:true,
+    rate(v){ return v==null?null: v?'green':'none'; }
+  },
+  { id:'hh_eating', cat:'healthy_habits',
+    text:'Have you eaten healthily today?', type:'yesno',
+    rate(v){ return v==null?null: v?'green':'amber'; }
+  },
+
+  /* ── PERIOD ── */
+  { id:'period', cat:'period',
+    text:'Are you on your period today?', type:'yesno', noScore:true,
+    rate(){ return 'none'; }
+  }
+];
+
+/* ══════════════════════════════════════
+   SCORING
+══════════════════════════════════════ */
+const W = { red:2, amber:1, green:0, none:0 };
+
+function catScore(ans, cid){
+  const qs = QS.filter(q => q.cat===cid && !q.noScore);
+  let s=0, mx=0;
+  for(const q of qs){
+    const r = ans[q.id]!==undefined ? q.rate(ans[q.id]) : null;
+    if(r===null) continue;
+    s += W[r]||0; mx += 2;
+  }
+  return mx===0 ? 0 : s/mx;
+}
+
+function pctRag(p){ return p<=.30?'green': p<=.60?'amber':'red'; }
+
+function calc(ans){
+  const cats={}, pcts={};
+  for(const c of ['hypomania','low_mood','healthy_habits']){
+    pcts[c] = catScore(ans,c);
+    cats[c]  = pctRag(pcts[c]);
+  }
+  const rank={green:0,amber:1,red:2};
+  const overall = Object.values(cats).reduce((w,r)=>rank[r]>rank[w]?r:w,'green');
+  return { cats, pcts, overall };
+}
+
+/* ══════════════════════════════════════
+   STORAGE
+══════════════════════════════════════ */
+function load(){ try{ return JSON.parse(localStorage.getItem('mt')||'{}'); } catch{ return {}; } }
+function save(d,ans){ const all=load(); all[d]=ans; localStorage.setItem('mt',JSON.stringify(all)); }
+function getE(d){ return load()[d]||null; }
+function allDates(){ return Object.keys(load()).sort().reverse(); }
+
+/* ══════════════════════════════════════
+   UTILITIES
+══════════════════════════════════════ */
+function td(){ return new Date().toISOString().split('T')[0]; }
+
+function fmtLong(d){
+  return new Date(d+'T12:00:00').toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});
+}
+function fmtShort(d){
+  const t=td();
+  if(d===t) return 'Today';
+  const y=new Date(); y.setDate(y.getDate()-1);
+  if(d===y.toISOString().split('T')[0]) return 'Yesterday';
+  return new Date(d+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+}
+
+function rtxt(r){ return {green:'Green',amber:'Amber',red:'Red',none:'—'}[r]||'—'; }
+
+function badge(r){
+  if(!r||r==='none') return '<span class="badge" style="background:#f5f4f1;color:#a8a29e;font-size:13px">—</span>';
+  const cl={green:'bg',amber:'ba',red:'br'}[r];
+  return `<span class="badge ${cl}">${rtxt(r)}</span>`;
+}
+
+function dispVal(q,v){
+  if(q.type==='yesno')   return v?'Yes':'No';
+  if(q.type==='choices') return q.opts[v]??String(v);
+  return String(v);
+}
+
+/* ══════════════════════════════════════
+   STATE
+══════════════════════════════════════ */
+let view='home', qs={idx:0,ans:{}}, detailDate=null;
+
+/* ══════════════════════════════════════
+   NAVIGATION
+══════════════════════════════════════ */
+function goTo(v){
+  view=v;
+  document.getElementById('hdr-btn').textContent='';
+  document.getElementById('hdr-btn').onclick=()=>hdrAct();
+  ['home','history'].forEach(t=>{
+    document.getElementById('tab-'+t)?.classList.toggle('on',t===v);
+  });
+  document.getElementById('nav').style.display='flex';
+  render();
+}
+
+function hdrAct(){ if(view==='home') startQ(); }
+
+/* ══════════════════════════════════════
+   RENDER DISPATCH
+══════════════════════════════════════ */
+function render(){
+  const m=document.getElementById('main');
+  if(view==='home')    renderHome(m);
+  else if(view==='history') renderHistory(m);
+  else if(view==='q')  renderQ(m);
+  else if(view==='detail') renderDetail(m);
+}
+
+/* ══════════════════════════════════════
+   HOME
+══════════════════════════════════════ */
+function renderHome(el){
+  document.getElementById('hdr-title').textContent='Mood Track';
+  const entry=getE(td());
+
+  if(!entry){
+    document.getElementById('hdr-btn').textContent='';
+    el.innerHTML=`<div class="fade">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:2px">${fmtLong(td())}</div>
+      <div style="font-family:'DM Serif Display',serif;font-size:27px;margin-bottom:18px">Hello 👋</div>
+      <div class="card" style="text-align:center;padding:38px 16px">
+        <div style="font-size:42px;margin-bottom:10px">📋</div>
+        <div style="font-size:18px;font-weight:800;margin-bottom:5px">No check-in yet today</div>
+        <div style="font-size:14px;color:var(--muted);margin-bottom:22px">Takes about 2–3 minutes</div>
+        <button class="btn btn-p" onclick="startQ()">Start today's check-in</button>
+      </div>
+      ${miniHist()}
+    </div>`;
+  } else {
+    document.getElementById('hdr-btn').textContent='Redo';
+    const res=calc(entry);
+    el.innerHTML=`<div class="fade">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:2px">${fmtLong(td())}</div>
+      <div style="font-family:'DM Serif Display',serif;font-size:27px;margin-bottom:14px">Today's results</div>
+      ${entry.period?'<div><span class="p-flag">🩸 Period day</span></div>':''}
+      <div class="banner ${res.overall}">
+        <div class="bl">Overall</div>
+        <div class="bv">${rtxt(res.overall)}</div>
+      </div>
+      <div class="card">
+        <div class="row"><div class="row-l">🧠 Hypomania</div>${badge(res.cats.hypomania)}</div>
+        <div class="row"><div class="row-l">💙 Low Mood</div>${badge(res.cats.low_mood)}</div>
+        <div class="row"><div class="row-l">🌿 Healthy Habits</div>${badge(res.cats.healthy_habits)}</div>
+        ${entry.hh_exercise!==undefined
+          ?`<div class="row"><div class="row-l" style="color:var(--muted);font-size:14px">Exercise</div>
+             <span style="font-size:13px;color:var(--muted)">${entry.hh_exercise?'✅ Done':'–'}</span></div>`:''}
+      </div>
+      ${miniHist()}
+    </div>`;
+  }
+}
+
+function miniHist(){
+  const ds=allDates().filter(d=>d!==td()).slice(0,3);
+  if(!ds.length) return '';
+  const rows=ds.map(d=>{
+    const e=getE(d); if(!e) return '';
+    const r=calc(e).overall;
+    return `<div class="h-item" onclick="showDetail('${d}')">
+      <div><div class="h-date">${fmtShort(d)}</div></div>
+      <div class="dot ${r}"></div>
+    </div>`;
+  }).join('');
+  return `<div class="card">
+    <div class="section-lbl">Recent</div>${rows}
+  </div>`;
+}
+
+/* ══════════════════════════════════════
+   HISTORY
+══════════════════════════════════════ */
+function renderHistory(el){
+  document.getElementById('hdr-title').textContent='History';
+  document.getElementById('hdr-btn').textContent='';
+  const dates=allDates();
+  if(!dates.length){
+    el.innerHTML=`<div class="fade empty"><div class="empty-i">📅</div>
+      <div style="font-weight:800;margin-bottom:6px">No entries yet</div>
+      <div style="font-size:14px">Complete your first check-in to begin</div></div>`;
+    return;
+  }
+  const byM={};
+  dates.forEach(d=>{ const k=d.slice(0,7); (byM[k]=byM[k]||[]).push(d); });
+  let html='<div class="fade">';
+  for(const [mk,ds] of Object.entries(byM)){
+    const [y,m]=mk.split('-');
+    const lbl=new Date(y,m-1,1).toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+    html+=`<div class="month-lbl">${lbl}</div><div class="card">`;
+    for(const d of ds){
+      const e=getE(d); if(!e) continue;
+      const r=calc(e).overall;
+      html+=`<div class="h-item" onclick="showDetail('${d}')">
+        <div>
+          <div class="h-date">${fmtShort(d)}${e.period?' 🩸':''}</div>
+          <div class="h-sub">${fmtLong(d)}</div>
+        </div>
+        <div class="dot ${r}"></div>
+      </div>`;
+    }
+    html+='</div>';
+  }
+  html+='</div>';
+  el.innerHTML=html;
+}
+
+/* ══════════════════════════════════════
+   DETAIL
+══════════════════════════════════════ */
+function showDetail(d){
+  detailDate=d; view='detail';
+  document.getElementById('tab-history').classList.add('on');
+  document.getElementById('tab-home').classList.remove('on');
+  document.getElementById('nav').style.display='flex';
+  render();
+}
+
+function renderDetail(el){
+  const entry=getE(detailDate); if(!entry){ goTo('history'); return; }
+  document.getElementById('hdr-title').textContent=fmtShort(detailDate);
+  document.getElementById('hdr-btn').textContent='← Back';
+  document.getElementById('hdr-btn').onclick=()=>goTo('history');
+  const res=calc(entry);
+
+  let html=`<div class="fade">
+    <div style="font-size:13px;color:var(--muted);margin-bottom:12px">${fmtLong(detailDate)}</div>
+    ${entry.period?'<div><span class="p-flag">🩸 Period day</span></div>':''}
+    <div class="banner ${res.overall}" style="margin-bottom:10px">
+      <div class="bl">Overall</div>
+      <div class="bv">${rtxt(res.overall)}</div>
+    </div>`;
+
+  for(const cid of ['hypomania','low_mood','healthy_habits']){
+    const cqs=QS.filter(q=>q.cat===cid);
+    html+=`<div class="card" style="margin-bottom:10px">
+      <div class="cat-hdr"><span>${CATS[cid].label}</span>${badge(res.cats[cid])}</div>`;
+    for(const q of cqs){
+      if(entry[q.id]===undefined) continue;
+      const r=q.rate(entry[q.id]);
+      html+=`<div class="row">
+        <div style="flex:1;padding-right:10px">
+          <div class="row-s">${q.text}</div>
+        </div>
+        <div>${(r&&r!=='none')?badge(r):`<span style="font-size:13px;color:var(--muted)">${dispVal(q,entry[q.id])}</span>`}</div>
+      </div>`;
+    }
+    html+='</div>';
+  }
+  html+='</div>';
+  el.innerHTML=html;
+}
+
+/* ══════════════════════════════════════
+   QUESTIONNAIRE
+══════════════════════════════════════ */
+function startQ(){
+  const ex=getE(td());
+  qs={ idx:0, ans: ex?{...ex}:{} };
+  // Pre-seed defaults so Next is never blocked on non-interactive types
+  for(const q of QS){
+    if(q.type==='slider'  && qs.ans[q.id]===undefined) qs.ans[q.id]=5;
+    if(q.type==='stepper' && qs.ans[q.id]===undefined) qs.ans[q.id]=0;
+  }
+  view='q';
+  document.getElementById('nav').style.display='none';
+  render();
+}
+
+function renderQ(el){
+  const q=QS[qs.idx], total=QS.length, cur=qs.ans[q.id];
+  const isLast=qs.idx===total-1;
+  const canNext=cur!==undefined && !(q.type==='time' && !cur);
+  const pct=((qs.idx+1)/total*100).toFixed(1);
+
+  document.getElementById('hdr-title').textContent=CATS[q.cat].label;
+  document.getElementById('hdr-btn').textContent='Exit';
+  document.getElementById('hdr-btn').onclick=()=>exitQ();
+
+  let body='';
+
+  if(q.type==='yesno'){
+    body=`<div class="yesno">
+      <button class="yn${cur===true?' sel':''}"  onclick="setA('${q.id}',true)">Yes</button>
+      <button class="yn${cur===false?' sel':''}" onclick="setA('${q.id}',false)">No</button>
+    </div>`;
+    if(q.id==='hh_exercise')
+      body+=`<p class="hint">Only tracked if yes — no penalty for no</p>`;
+
+  } else if(q.type==='choices'){
+    body='<div class="choices">'+q.opts.map((o,i)=>
+      `<button class="ch${cur===i?' sel':''}" onclick="setA('${q.id}',${i})">${o}</button>`
+    ).join('')+'</div>';
+
+  } else if(q.type==='slider'){
+    const v=cur??5, r=q.rate(v);
+    const col=r==='green'?'var(--green)':r==='amber'?'var(--amber)':'var(--red)';
+    body=`<div class="sl-wrap">
+      <div class="sl-num" id="sv" style="color:${col}">${v}</div>
+      <div class="sl-badge" id="sb">${badge(r)}</div>
+      <input type="range" min="${q.min}" max="${q.max}" value="${v}"
+        oninput="slideU('${q.id}',+this.value)">
+      <div class="sl-ends"><span>${q.min}</span><span>${q.max}</span></div>
+      ${q.ends?`<div class="sl-ends" style="margin-top:2px">
+        <span style="font-size:11px">${q.ends[0]}</span>
+        <span style="font-size:11px">${q.ends[1]}</span>
+      </div>`:''}
+    </div>`;
+
+  } else if(q.type==='stepper'){
+    const v=cur??0;
+    body=`<div class="stepper">
+      <button class="st-btn" onclick="stepU('${q.id}',-1)">−</button>
+      <div class="st-val" id="sv">${v}</div>
+      <button class="st-btn" onclick="stepU('${q.id}',+1)">+</button>
+    </div>
+    <div style="text-align:center;margin-bottom:20px" id="sb">${badge(q.rate(v))}</div>`;
+
+  } else if(q.type==='time'){
+    body=`<input type="time" class="t-inp" value="${cur||''}"
+      oninput="setA('${q.id}',this.value,true)"
+      onchange="setA('${q.id}',this.value,true)">
+    <div style="text-align:center;margin-bottom:16px;min-height:27px">
+      ${cur?badge(q.rate(cur)):''}
+    </div>`;
+  }
+
+  el.innerHTML=`<div class="fade">
+    <div class="prog"><div class="prog-f" style="width:${pct}%"></div></div>
+    <div class="q-num">${qs.idx+1} of ${total}</div>
+    <div class="q-cat" style="color:${CATS[q.cat].col}">${CATS[q.cat].label}</div>
+    <div class="q-text">${q.text}</div>
+    ${body}
+    <div class="q-nav">
+      ${qs.idx>0?'<button class="back-btn" onclick="prevQ()">←</button>':''}
+      <button class="btn btn-p" onclick="${isLast?'finishQ()':'nextQ()'}"
+        style="opacity:${canNext?'1':'.35'};${canNext?'':'pointer-events:none'}">
+        ${isLast?'Finish ✓':'Next →'}
+      </button>
+    </div>
+  </div>`;
+}
+
+function slideU(id,v){
+  qs.ans[id]=v;
+  const q=QS.find(q=>q.id===id), r=q.rate(v);
+  const col=r==='green'?'var(--green)':r==='amber'?'var(--amber)':'var(--red)';
+  const sv=document.getElementById('sv'), sb=document.getElementById('sb');
+  if(sv){ sv.textContent=v; sv.style.color=col; }
+  if(sb) sb.innerHTML=badge(r);
+}
+
+function stepU(id,d){
+  const q=QS.find(q=>q.id===id);
+  qs.ans[id]=Math.max(q.min??0, Math.min(q.max??99, (qs.ans[id]??0)+d));
+  renderQ(document.getElementById('main'));
+}
+
+function setA(id,v,noAdv){
+  qs.ans[id]=v;
+  const q=QS[qs.idx];
+  if(!noAdv && (q.type==='yesno'||q.type==='choices')){
+    setTimeout(()=>{ qs.idx===QS.length-1 ? finishQ() : nextQ(); }, 300);
+  } else {
+    renderQ(document.getElementById('main'));
+  }
+}
+
+function nextQ(){
+  if(qs.ans[QS[qs.idx].id]===undefined) return;
+  if(qs.idx<QS.length-1){ qs.idx++; renderQ(document.getElementById('main')); document.getElementById('main').scrollTop=0; }
+}
+function prevQ(){
+  if(qs.idx>0){ qs.idx--; renderQ(document.getElementById('main')); document.getElementById('main').scrollTop=0; }
+}
+function finishQ(){
+  save(td(), qs.ans); goTo('home');
+}
+function exitQ(){
+  if(Object.keys(qs.ans).length) save(td(), qs.ans);
+  goTo('home');
+}
+
+/* ══════════════════════════════════════
+   INIT
+══════════════════════════════════════ */
+goTo('home');
+</script>
+</body>
+</html>
