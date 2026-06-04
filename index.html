@@ -302,6 +302,11 @@
     }
     .fade { animation: fi .18s ease both; }
     @keyframes fi { from { opacity:0; transform:translateY(7px); } to { opacity:1; transform:translateY(0); } }
+
+    /* ── TRENDS ── */
+    .ts { background:var(--card); border-radius:var(--r); padding:16px; margin-bottom:10px; box-shadow:var(--shadow); }
+    .tt { font-size:15px; font-weight:800; margin-bottom:12px; color:var(--text); }
+    .tsub { font-size:12px; font-weight:400; color:var(--muted); }
   </style>
 </head>
 <body>
@@ -324,6 +329,12 @@
         <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
       </svg>
       History
+    </button>
+    <button class="ntab" id="tab-trends" onclick="goTo('trends')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+      </svg>
+      Trends
     </button>
   </div>
 </div>
@@ -511,7 +522,7 @@ function goTo(v){
   view=v;
   document.getElementById('hdr-btn').textContent='';
   document.getElementById('hdr-btn').onclick=()=>hdrAct();
-  ['home','history'].forEach(t=>{
+  ['home','history','trends'].forEach(t=>{
     document.getElementById('tab-'+t)?.classList.toggle('on',t===v);
   });
   document.getElementById('nav').style.display='flex';
@@ -527,6 +538,7 @@ function render(){
   const m=document.getElementById('main');
   if(view==='home')    renderHome(m);
   else if(view==='history') renderHistory(m);
+  else if(view==='trends')  renderTrends(m);
   else if(view==='q')  renderQ(m);
   else if(view==='detail') renderDetail(m);
 }
@@ -806,8 +818,287 @@ function exitQ(){
 }
 
 /* ══════════════════════════════════════
-   INIT
+   TRENDS
 ══════════════════════════════════════ */
+
+function renderTrends(el){
+  document.getElementById('hdr-title').textContent='Trends';
+  document.getElementById('hdr-btn').textContent='';
+  const all=load(), allD=Object.keys(all).sort();
+  if(allD.length<5){
+    el.innerHTML=`<div class="fade empty">
+      <div class="empty-i">📈</div>
+      <div style="font-weight:800;margin-bottom:6px">Not enough data yet</div>
+      <div style="font-size:14px;max-width:260px;margin:0 auto">Trends appear once you have at least 5 check-ins</div>
+    </div>`;
+    return;
+  }
+  let html='<div class="fade">';
+  html+=tHeatmap(all);
+  html+=tCatLines(all,allD);
+  html+=tSignals(all,allD);
+  const pDays=allD.filter(d=>all[d]&&all[d].period);
+  if(pDays.length>=3) html+=tPeriod(all,allD,pDays);
+  if(allD.length>=14) html+=tWeekly(all,allD);
+  html+='</div>';
+  el.innerHTML=html;
+}
+
+// ── Utility: last N days as date strings ──
+function daysBack(n){
+  const out=[];
+  for(let i=n-1;i>=0;i--){
+    const d=new Date(); d.setDate(d.getDate()-i);
+    out.push(d.toISOString().split('T')[0]);
+  }
+  return out;
+}
+
+// ── Normalize a value so chart bands align with score thresholds ──
+// t1 = green/amber boundary in original scale, t2 = amber/red boundary
+function norm(val,min,t1,t2,max){
+  const v=Math.max(min,Math.min(max,val));
+  if(v<=t1) return (v-min)/(t1-min)*0.3;
+  if(v<=t2) return 0.3+(v-t1)/(t2-t1)*0.3;
+  return 0.6+(v-t2)/(max-t2)*0.4;
+}
+
+// ── SVG Line Chart ──
+// v=0 bottom (good/green), v=1 top (bad/red). Background bands match.
+function lineSVG(datasets,dates,W=320,H=150){
+  const PL=28,PR=10,PT=12,PB=26;
+  const cW=W-PL-PR, cH=H-PT-PB, n=dates.length;
+  if(n<2) return '';
+  let s=`<svg width="100%" viewBox="0 0 ${W} ${H}">`;
+  // Background bands (red=top, green=bottom)
+  s+=`<rect x="${PL}" y="${PT}" width="${cW}" height="${cH*.4}" fill="#fff1f1"/>`;
+  s+=`<rect x="${PL}" y="${PT+cH*.4}" width="${cW}" height="${cH*.3}" fill="#fffde7"/>`;
+  s+=`<rect x="${PL}" y="${PT+cH*.7}" width="${cW}" height="${cH*.3}" fill="#f0fdf4"/>`;
+  s+=`<line x1="${PL}" x2="${PL+cW}" y1="${PT+cH*.4}" y2="${PT+cH*.4}" stroke="#e7e5e0" stroke-width="1"/>`;
+  s+=`<line x1="${PL}" x2="${PL+cW}" y1="${PT+cH*.7}" y2="${PT+cH*.7}" stroke="#e7e5e0" stroke-width="1"/>`;
+  // Y axis labels
+  s+=`<text x="${PL-4}" y="${PT+4}" text-anchor="end" font-size="9" fill="#a8a29e" font-family="DM Sans,sans-serif">R</text>`;
+  s+=`<text x="${PL-4}" y="${PT+cH*.4+4}" text-anchor="end" font-size="9" fill="#a8a29e" font-family="DM Sans,sans-serif">A</text>`;
+  s+=`<text x="${PL-4}" y="${PT+cH*.7+4}" text-anchor="end" font-size="9" fill="#a8a29e" font-family="DM Sans,sans-serif">G</text>`;
+  // X axis labels (first, mid, last)
+  for(const i of [0,Math.floor(n/2),n-1]){
+    if(!dates[i]) continue;
+    const x=PL+(n>1?i/(n-1):0.5)*cW;
+    const lbl=new Date(dates[i]+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+    s+=`<text x="${x.toFixed(1)}" y="${H-3}" text-anchor="middle" font-size="9" fill="#a8a29e" font-family="DM Sans,sans-serif">${lbl}</text>`;
+  }
+  // Lines
+  for(const ds of datasets){
+    if(!ds.values||ds.values.length<2) continue;
+    const pts=ds.values.map((v,i)=>{
+      const x=PL+(n>1?i/(n-1):0.5)*cW;
+      const y=PT+(1-Math.max(0,Math.min(1,v)))*cH;
+      return [x,y];
+    });
+    const path=pts.map((p,i)=>`${i?'L':'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+    s+=`<path d="${path}" fill="none" stroke="${ds.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.85"/>`;
+    for(const [x,y] of pts)
+      s+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="${ds.color}"/>`;
+  }
+  s+='</svg>';
+  return s;
+}
+
+// ── CALENDAR HEATMAP ──
+function tHeatmap(all){
+  const days=daysBack(60);
+  const first=new Date(days[0]+'T12:00:00');
+  let dow=first.getDay(); dow=dow===0?6:dow-1; // Mon=0
+  const cells=Array(dow).fill(null).concat(days);
+  while(cells.length%7!==0) cells.push(null);
+  const nW=cells.length/7, cs=30, g=3, lp=20;
+  const svgW=lp+nW*(cs+g)-g, svgH=16+7*(cs+g)-g;
+  let s=`<svg width="100%" viewBox="0 0 ${svgW} ${svgH}">`;
+  // Day labels
+  'MTWTFSS'.split('').forEach((d,r)=>{
+    s+=`<text x="${lp/2}" y="${16+r*(cs+g)+cs/2+4}" text-anchor="middle" font-size="9" fill="#a8a29e" font-family="DM Sans,sans-serif">${d}</text>`;
+  });
+  // Month labels
+  let lastMon='';
+  for(let c=0;c<nW;c++){
+    for(let r=0;r<7;r++){
+      const cd=cells[c*7+r];
+      if(cd){ const mo=cd.slice(5,7); if(mo!==lastMon){ lastMon=mo; s+=`<text x="${(lp+c*(cs+g)+cs/2).toFixed(1)}" y="10" text-anchor="middle" font-size="9" fill="#a8a29e" font-family="DM Sans,sans-serif">${new Date(cd+'T12:00:00').toLocaleDateString('en-GB',{month:'short'})}</text>`; } break; }
+    }
+  }
+  // Cells
+  for(let c=0;c<nW;c++){
+    for(let r=0;r<7;r++){
+      const d=cells[c*7+r]; if(!d) continue;
+      const x=lp+c*(cs+g), y=16+r*(cs+g);
+      const e=all[d];
+      let fill='#e7e5e0', click='';
+      if(e){
+        const ov=calc(e).overall;
+        fill=ov==='green'?'#16a34a':ov==='amber'?'#d97706':'#dc2626';
+        click=`style="cursor:pointer" onclick="showDetail('${d}')"`;
+      }
+      s+=`<rect x="${x}" y="${y}" width="${cs}" height="${cs}" rx="5" fill="${fill}" ${click}/>`;
+      if(e&&e.period) s+=`<circle cx="${x+cs-5}" cy="${y+5}" r="4" fill="#f9a8d4"/>`;
+    }
+  }
+  s+='</svg>';
+  return `<div class="ts">
+    <div class="tt">Last 60 Days</div>
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">${s}</div>
+    <div style="display:flex;gap:12px;margin-top:10px;flex-wrap:wrap">
+      ${[['#16a34a','Green'],['#d97706','Amber'],['#dc2626','Red'],['#e7e5e0','No entry']].map(([c,l])=>
+        `<span style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)"><span style="width:12px;height:12px;border-radius:3px;background:${c};display:inline-block"></span>${l}</span>`).join('')}
+      <span style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)"><span style="width:8px;height:8px;border-radius:50%;background:#f9a8d4;display:inline-block"></span>Period</span>
+    </div>
+  </div>`;
+}
+
+// ── CATEGORY TREND LINES ──
+function tCatLines(all,allD){
+  const dates=daysBack(30).filter(d=>all[d]);
+  if(dates.length<3) return '';
+  const CCOL={hypomania:'#7c3aed',low_mood:'#2563eb',healthy_habits:'#059669'};
+  const datasets=Object.entries(CCOL).map(([cid,color])=>({
+    color, values:dates.map(d=>catScore(all[d],cid))
+  }));
+  return `<div class="ts">
+    <div class="tt">Category Trends <span class="tsub">last 30 days</span></div>
+    ${lineSVG(datasets,dates)}
+    <div style="display:flex;gap:14px;margin-top:8px;flex-wrap:wrap">
+      ${Object.entries(CCOL).map(([cid,col])=>
+        `<span style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)"><span style="width:18px;height:3px;background:${col};border-radius:2px;display:inline-block;opacity:.85"></span>${CATS[cid].label}</span>`).join('')}
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-top:5px">Higher = worse. Tap any day in History for full detail.</div>
+  </div>`;
+}
+
+// ── KEY SIGNALS ──
+function tSignals(all,allD){
+  const dates=daysBack(30).filter(d=>all[d]);
+  if(dates.length<3) return '';
+  let html=`<div class="ts"><div class="tt">Key Signals <span class="tsub">last 30 days</span></div>`;
+
+  // Sleep time
+  const sDates=dates.filter(d=>all[d].h_sleep_time);
+  if(sDates.length>=3){
+    const vals=sDates.map(d=>{
+      const [h,m]=all[d].h_sleep_time.split(':').map(Number);
+      const eff=h<6?h*60+m+1440:h*60+m;
+      return norm(eff,1080,1260,1320,1440);
+    });
+    html+=`<div style="margin-bottom:16px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:5px">💤 Sleep time</div>
+      ${lineSVG([{values:vals,color:'#0d9488'}],sDates,320,110)}
+      <div style="font-size:11px;color:var(--muted);margin-top:3px">Higher = later bedtime · Green &lt;9pm · Amber 9–10pm · Red 10pm+</div>
+    </div>`;
+  }
+
+  // Energy level
+  const eDates=dates.filter(d=>all[d].h_energy!==undefined);
+  if(eDates.length>=3){
+    const vals=eDates.map(d=>norm(all[d].h_energy,0,6,7,10));
+    html+=`<div style="margin-bottom:16px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:5px">⚡ Energy level</div>
+      ${lineSVG([{values:vals,color:'#f59e0b'}],eDates,320,110)}
+      <div style="font-size:11px;color:var(--muted);margin-top:3px">Higher = more energy · Green 0–6 · Amber 7 · Red 8+</div>
+    </div>`;
+  }
+
+  // Teariness (dot timeline — binary data, line chart would be misleading)
+  const tDates=dates.filter(d=>all[d].h_teary!==undefined||all[d].l_teary!==undefined);
+  if(tDates.length>=3){
+    const W=320,H=56,PL=10,PR=10,PT=8,PB=18;
+    const cW=W-PL-PR, n=tDates.length;
+    let ds=`<svg width="100%" viewBox="0 0 ${W} ${H}">`;
+    ds+=`<line x1="${PL}" x2="${PL+cW}" y1="${(H-PB+PT)/2}" y2="${(H-PB+PT)/2}" stroke="#e7e5e0" stroke-width="1"/>`;
+    tDates.forEach((d,i)=>{
+      const x=PL+(n>1?i/(n-1):0.5)*cW;
+      const cy=(H-PB+PT)/2;
+      const teary=all[d].h_teary===true||all[d].l_teary===true;
+      ds+=`<circle cx="${x.toFixed(1)}" cy="${cy.toFixed(1)}" r="8" fill="${teary?'#dc2626':'#16a34a'}" opacity="0.8"/>`;
+    });
+    for(const i of [0,Math.floor(n/2),n-1]){
+      if(!tDates[i]) continue;
+      const x=PL+(n>1?i/(n-1):0.5)*cW;
+      const lbl=new Date(tDates[i]+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+      ds+=`<text x="${x.toFixed(1)}" y="${H-2}" text-anchor="middle" font-size="9" fill="#a8a29e" font-family="DM Sans,sans-serif">${lbl}</text>`;
+    }
+    ds+='</svg>';
+    html+=`<div>
+      <div style="font-size:13px;font-weight:700;margin-bottom:5px">😢 Teariness</div>
+      <div style="overflow-x:auto">${ds}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:3px">Red = teary · Green = not teary</div>
+    </div>`;
+  }
+
+  html+='</div>';
+  return html;
+}
+
+// ── PERIOD COMPARISON ──
+function tPeriod(all,allD,pDays){
+  const npDays=allD.filter(d=>all[d]&&!all[d].period);
+  if(npDays.length<2) return '';
+  const avg=(days,cid)=>{ const s=days.map(d=>catScore(all[d],cid)); return s.reduce((a,b)=>a+b,0)/s.length; };
+  const cats=['hypomania','low_mood','healthy_habits'];
+  const CCOL={hypomania:'#7c3aed',low_mood:'#2563eb',healthy_habits:'#059669'};
+  return `<div class="ts">
+    <div class="tt">Period vs Non-Period</div>
+    <div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:8px;align-items:center">
+      <div></div>
+      <div style="text-align:center;font-size:11px;font-weight:700;color:var(--muted)">🩸 Period<br><span style="font-weight:400">${pDays.length} days</span></div>
+      <div style="text-align:center;font-size:11px;font-weight:700;color:var(--muted)">Non-period<br><span style="font-weight:400">${npDays.length} days</span></div>
+      ${cats.map(cid=>`
+        <div style="font-size:12px;font-weight:700;color:${CCOL[cid]}">${CATS[cid].label}</div>
+        <div style="text-align:center">${badge(pctRag(avg(pDays,cid)))}</div>
+        <div style="text-align:center">${badge(pctRag(avg(npDays,cid)))}</div>`).join('')}
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-top:8px">Average score across all ${allD.length} entries</div>
+  </div>`;
+}
+
+// ── WEEKLY PATTERNS ──
+function tWeekly(all,allD){
+  const byDow=Array.from({length:7},()=>[]);
+  for(const d of allD){
+    if(!all[d]) continue;
+    let dow=new Date(d+'T12:00:00').getDay(); dow=dow===0?6:dow-1;
+    byDow[dow].push({green:0,amber:1,red:2}[calc(all[d]).overall]);
+  }
+  const avgs=byDow.map(a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null);
+  const W=320,H=120,PL=28,PR=10,PT=10,PB=30;
+  const cW=W-PL-PR, cH=H-PT-PB, bW=(cW/7)-4;
+  let s=`<svg width="100%" viewBox="0 0 ${W} ${H}">`;
+  // Bands
+  s+=`<rect x="${PL}" y="${PT}" width="${cW}" height="${cH*.33}" fill="#fff1f1"/>`;
+  s+=`<rect x="${PL}" y="${PT+cH*.33}" width="${cW}" height="${cH*.34}" fill="#fffde7"/>`;
+  s+=`<rect x="${PL}" y="${PT+cH*.67}" width="${cW}" height="${cH*.33}" fill="#f0fdf4"/>`;
+  s+=`<line x1="${PL}" x2="${PL+cW}" y1="${PT+cH*.33}" y2="${PT+cH*.33}" stroke="#e7e5e0" stroke-width="1"/>`;
+  s+=`<line x1="${PL}" x2="${PL+cW}" y1="${PT+cH*.67}" y2="${PT+cH*.67}" stroke="#e7e5e0" stroke-width="1"/>`;
+  s+=`<text x="${PL-4}" y="${PT+4}" text-anchor="end" font-size="9" fill="#a8a29e" font-family="DM Sans,sans-serif">R</text>`;
+  s+=`<text x="${PL-4}" y="${PT+cH*.33+4}" text-anchor="end" font-size="9" fill="#a8a29e" font-family="DM Sans,sans-serif">A</text>`;
+  s+=`<text x="${PL-4}" y="${PT+cH*.67+4}" text-anchor="end" font-size="9" fill="#a8a29e" font-family="DM Sans,sans-serif">G</text>`;
+  // Bars
+  'MTWTFSS'.split('').forEach((day,i)=>{
+    const x=PL+(i/7)*cW+2, v=avgs[i];
+    if(v!==null){
+      const bH=(v/2)*cH, by=PT+cH-bH;
+      const col=v<=0.67?'#16a34a':v<=1.33?'#d97706':'#dc2626';
+      s+=`<rect x="${x.toFixed(1)}" y="${by.toFixed(1)}" width="${bW.toFixed(1)}" height="${bH.toFixed(1)}" rx="4" fill="${col}" opacity="0.75"/>`;
+      s+=`<text x="${(x+bW/2).toFixed(1)}" y="${H-17}" text-anchor="middle" font-size="9" fill="#a8a29e" font-family="DM Sans,sans-serif">${byDow[i].length}</text>`;
+    }
+    s+=`<text x="${(x+bW/2).toFixed(1)}" y="${H-4}" text-anchor="middle" font-size="10" fill="#78716c" font-family="DM Sans,sans-serif" font-weight="600">${day}</text>`;
+  });
+  s+='</svg>';
+  return `<div class="ts">
+    <div class="tt">Weekly Patterns</div>
+    ${s}
+    <div style="font-size:11px;color:var(--muted);margin-top:4px">Average overall score by day. Numbers show entry count. Needs more data over time to become reliable.</div>
+  </div>`;
+}
+
+
 goTo('home');
 </script>
 </body>
