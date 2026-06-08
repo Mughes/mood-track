@@ -288,6 +288,21 @@
       color: #9d174d; background: #fce7f3;
       padding: 4px 11px; border-radius: 20px; margin-bottom: 10px;
     }
+    .ns-flag {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 13px; font-weight: 700;
+      color: #1e40af; background: #dbeafe;
+      padding: 4px 11px; border-radius: 20px; margin-bottom: 10px; margin-left: 6px;
+    }
+    .date-inp {
+      display: block; width: 100%; padding: 15px 18px;
+      border: 2px solid var(--border); border-radius: var(--r);
+      font-size: 17px; font-weight: 600;
+      background: var(--card); color: var(--text);
+      margin-bottom: 16px; outline: none;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .date-inp:focus { border-color: var(--teal); }
     .hint { text-align: center; font-size: 13px; color: var(--muted); margin-top: -14px; margin-bottom: 18px; }
     .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
     .empty-i { font-size: 44px; margin-bottom: 12px; }
@@ -440,6 +455,10 @@ const QS = [
   { id:'period', cat:'period',
     text:'Are you on your period today?', type:'yesno', noScore:true,
     rate(){ return 'none'; }
+  },
+  { id:'night_sweats', cat:'period',
+    text:'Did you have night sweats?', type:'yesno', noScore:true,
+    rate(){ return 'none'; }
   }
 ];
 
@@ -513,7 +532,7 @@ function dispVal(q,v){
 /* ══════════════════════════════════════
    STATE
 ══════════════════════════════════════ */
-let view='home', qs={idx:0,ans:{}}, detailDate=null;
+let view='home', qs={idx:0,ans:{}}, detailDate=null, qDate=null;
 
 /* ══════════════════════════════════════
    NAVIGATION
@@ -539,6 +558,7 @@ function render(){
   if(view==='home')    renderHome(m);
   else if(view==='history') renderHistory(m);
   else if(view==='trends')  renderTrends(m);
+  else if(view==='pick-date') renderPickDate(m);
   else if(view==='q')  renderQ(m);
   else if(view==='detail') renderDetail(m);
 }
@@ -570,6 +590,7 @@ function renderHome(el){
       <div style="font-size:13px;color:var(--muted);margin-bottom:2px">${fmtLong(td())}</div>
       <div style="font-family:'DM Serif Display',serif;font-size:27px;margin-bottom:14px">Today's results</div>
       ${entry.period?'<div><span class="p-flag">🩸 Period day</span></div>':''}
+      ${entry.night_sweats?'<div><span class="ns-flag">💧 Night sweats</span></div>':''}
       <div class="banner ${res.overall}">
         <div class="bl">Overall</div>
         <div class="bv">${rtxt(res.overall)}</div>
@@ -608,7 +629,8 @@ function miniHist(){
 ══════════════════════════════════════ */
 function renderHistory(el){
   document.getElementById('hdr-title').textContent='History';
-  document.getElementById('hdr-btn').textContent='';
+  document.getElementById('hdr-btn').textContent='+ Log';
+  document.getElementById('hdr-btn').onclick=()=>{ view='pick-date'; document.getElementById('nav').style.display='flex'; render(); };
   const dates=allDates();
   if(!dates.length){
     el.innerHTML=`<div class="fade empty"><div class="empty-i">📅</div>
@@ -626,9 +648,10 @@ function renderHistory(el){
     for(const d of ds){
       const e=getE(d); if(!e) continue;
       const r=calc(e).overall;
+      const flags=(e.period?' 🩸':'')+(e.night_sweats?' 💧':'');
       html+=`<div class="h-item" onclick="showDetail('${d}')">
         <div>
-          <div class="h-date">${fmtShort(d)}${e.period?' 🩸':''}</div>
+          <div class="h-date">${fmtShort(d)}${flags}</div>
           <div class="h-sub">${fmtLong(d)}</div>
         </div>
         <div class="dot ${r}"></div>
@@ -638,6 +661,48 @@ function renderHistory(el){
   }
   html+='</div>';
   el.innerHTML=html;
+}
+
+/* ══════════════════════════════════════
+   PICK DATE
+══════════════════════════════════════ */
+function renderPickDate(el){
+  document.getElementById('hdr-title').textContent='Log a Past Day';
+  document.getElementById('hdr-btn').textContent='← Back';
+  document.getElementById('hdr-btn').onclick=()=>goTo('history');
+
+  const yesterday=new Date(); yesterday.setDate(yesterday.getDate()-1);
+  const defaultDate=yesterday.toISOString().split('T')[0];
+  const oneYearAgo=new Date(); oneYearAgo.setFullYear(oneYearAgo.getFullYear()-1);
+  const minDate=oneYearAgo.toISOString().split('T')[0];
+
+  el.innerHTML=`<div class="fade">
+    <div style="font-size:14px;color:var(--muted);margin-bottom:16px">
+      Select a date to fill in a check-in you missed, or to go back and update one.
+    </div>
+    <div class="card">
+      <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em">Select date</div>
+      <input type="date" class="date-inp" id="past-date-inp"
+        value="${defaultDate}" max="${td()}" min="${minDate}"
+        onchange="pickDateChanged(this.value)">
+      <div id="past-date-warn" style="font-size:13px;color:var(--amber);margin-bottom:12px;min-height:18px"></div>
+      <button class="btn btn-p" onclick="startPastQ()">Start check-in for this day →</button>
+    </div>
+  </div>`;
+
+  pickDateChanged(defaultDate);
+}
+
+function pickDateChanged(d){
+  const warn=document.getElementById('past-date-warn');
+  if(!warn) return;
+  warn.textContent = getE(d) ? '⚠️ This day already has an entry — starting will overwrite it.' : '';
+}
+
+function startPastQ(){
+  const inp=document.getElementById('past-date-inp');
+  if(!inp||!inp.value) return;
+  startQ(inp.value);
 }
 
 /* ══════════════════════════════════════
@@ -660,7 +725,10 @@ function renderDetail(el){
 
   let html=`<div class="fade">
     <div style="font-size:13px;color:var(--muted);margin-bottom:12px">${fmtLong(detailDate)}</div>
-    ${entry.period?'<div><span class="p-flag">🩸 Period day</span></div>':''}
+    <div style="margin-bottom:10px">
+      ${entry.period?'<span class="p-flag">🩸 Period day</span>':''}
+      ${entry.night_sweats?'<span class="ns-flag">💧 Night sweats</span>':''}
+    </div>
     <div class="banner ${res.overall}" style="margin-bottom:10px">
       <div class="bl">Overall</div>
       <div class="bv">${rtxt(res.overall)}</div>
@@ -682,6 +750,7 @@ function renderDetail(el){
     }
     html+='</div>';
   }
+  html+=`<button class="btn btn-g" style="margin-top:4px" onclick="startQ('${detailDate}')">Edit this entry</button>`;
   html+='</div>';
   el.innerHTML=html;
 }
@@ -689,10 +758,10 @@ function renderDetail(el){
 /* ══════════════════════════════════════
    QUESTIONNAIRE
 ══════════════════════════════════════ */
-function startQ(){
-  const ex=getE(td());
+function startQ(date){
+  qDate = date || td();
+  const ex=getE(qDate);
   qs={ idx:0, ans: ex?{...ex}:{} };
-  // Pre-seed defaults so Next is never blocked on non-interactive types
   for(const q of QS){
     if(q.type==='slider'  && qs.ans[q.id]===undefined) qs.ans[q.id]=5;
     if(q.type==='stepper' && qs.ans[q.id]===undefined) qs.ans[q.id]=0;
@@ -711,6 +780,12 @@ function renderQ(el){
   document.getElementById('hdr-title').textContent=CATS[q.cat].label;
   document.getElementById('hdr-btn').textContent='Exit';
   document.getElementById('hdr-btn').onclick=()=>exitQ();
+
+  // Show date context if logging a past day
+  const isToday = qDate===td();
+  const dateBanner = !isToday
+    ? `<div style="background:var(--teal-2);color:var(--teal);font-size:13px;font-weight:700;padding:8px 12px;border-radius:10px;margin-bottom:16px">📅 Logging: ${fmtLong(qDate)}</div>`
+    : '';
 
   let body='';
 
@@ -762,6 +837,7 @@ function renderQ(el){
   }
 
   el.innerHTML=`<div class="fade">
+    ${dateBanner}
     <div class="prog"><div class="prog-f" style="width:${pct}%"></div></div>
     <div class="q-num">${qs.idx+1} of ${total}</div>
     <div class="q-cat" style="color:${CATS[q.cat].col}">${CATS[q.cat].label}</div>
@@ -810,11 +886,12 @@ function prevQ(){
   if(qs.idx>0){ qs.idx--; renderQ(document.getElementById('main')); document.getElementById('main').scrollTop=0; }
 }
 function finishQ(){
-  save(td(), qs.ans); goTo('home');
+  save(qDate, qs.ans);
+  qDate===td() ? goTo('home') : goTo('history');
 }
 function exitQ(){
-  if(Object.keys(qs.ans).length) save(td(), qs.ans);
-  goTo('home');
+  if(Object.keys(qs.ans).length) save(qDate, qs.ans);
+  qDate===td() ? goTo('home') : goTo('history');
 }
 
 /* ══════════════════════════════════════
