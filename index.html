@@ -322,6 +322,22 @@
     .ts { background:var(--card); border-radius:var(--r); padding:16px; margin-bottom:10px; box-shadow:var(--shadow); }
     .tt { font-size:15px; font-weight:800; margin-bottom:12px; color:var(--text); }
     .tsub { font-size:12px; font-weight:400; color:var(--muted); }
+
+    /* ── SELECT ── */
+    .sel-inp {
+      width: 100%; padding: 12px 28px 12px 10px;
+      border: 2px solid var(--border); border-radius: var(--r);
+      background: var(--card); color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px; font-weight: 600;
+      outline: none; cursor: pointer;
+      -webkit-appearance: none; appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2378716c' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+      background-size: 16px;
+    }
+    .sel-inp:focus { border-color: var(--teal); }
   </style>
 </head>
 <body>
@@ -671,38 +687,69 @@ function renderPickDate(el){
   document.getElementById('hdr-btn').textContent='← Back';
   document.getElementById('hdr-btn').onclick=()=>goTo('history');
 
-  const yesterday=new Date(); yesterday.setDate(yesterday.getDate()-1);
-  const defaultDate=yesterday.toISOString().split('T')[0];
-  const oneYearAgo=new Date(); oneYearAgo.setFullYear(oneYearAgo.getFullYear()-1);
-  const minDate=oneYearAgo.toISOString().split('T')[0];
+  const now=new Date();
+  const yest=new Date(now); yest.setDate(now.getDate()-1);
+  const defD=yest.getDate(), defM=yest.getMonth(), defY=yest.getFullYear();
+
+  const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const years=[now.getFullYear(), now.getFullYear()-1];
+
+  const dayOpts=Array.from({length:31},(_,i)=>i+1).map(d=>
+    `<option value="${d}"${d===defD?' selected':''}>${d}</option>`).join('');
+  const monOpts=months.map((m,i)=>
+    `<option value="${i}"${i===defM?' selected':''}>${m}</option>`).join('');
+  const yrOpts=years.map(y=>
+    `<option value="${y}"${y===defY?' selected':''}>${y}</option>`).join('');
 
   el.innerHTML=`<div class="fade">
     <div style="font-size:14px;color:var(--muted);margin-bottom:16px">
-      Select a date to fill in a check-in you missed, or to go back and update one.
+      Select a date to fill in a check-in you missed, or go back and update one.
     </div>
     <div class="card">
-      <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em">Select date</div>
-      <input type="date" class="date-inp" id="past-date-inp"
-        value="${defaultDate}" max="${td()}" min="${minDate}"
-        onchange="pickDateChanged(this.value)">
-      <div id="past-date-warn" style="font-size:13px;color:var(--amber);margin-bottom:12px;min-height:18px"></div>
-      <button class="btn btn-p" onclick="startPastQ()">Start check-in for this day →</button>
+      <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:.06em">Select date</div>
+      <div style="display:grid;grid-template-columns:1fr 2fr 1.5fr;gap:8px;margin-bottom:14px">
+        <select id="pd-d" class="sel-inp" onchange="pdChanged()">${dayOpts}</select>
+        <select id="pd-m" class="sel-inp" onchange="pdChanged()">${monOpts}</select>
+        <select id="pd-y" class="sel-inp" onchange="pdChanged()">${yrOpts}</select>
+      </div>
+      <div id="pd-warn" style="font-size:13px;color:var(--amber);margin-bottom:12px;min-height:18px"></div>
+      <button class="btn btn-p" id="pd-btn" onclick="startPastQ()">Start check-in for this day →</button>
     </div>
   </div>`;
 
-  pickDateChanged(defaultDate);
+  pdChanged();
 }
 
-function pickDateChanged(d){
-  const warn=document.getElementById('past-date-warn');
-  if(!warn) return;
-  warn.textContent = getE(d) ? '⚠️ This day already has an entry — starting will overwrite it.' : '';
+function pdPicked(){
+  const d=+document.getElementById('pd-d').value;
+  const m=+document.getElementById('pd-m').value;
+  const y=+document.getElementById('pd-y').value;
+  const dt=new Date(y,m,d);
+  if(dt.getFullYear()!==y||dt.getMonth()!==m||dt.getDate()!==d) return null;
+  return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+
+function pdChanged(){
+  const warn=document.getElementById('pd-warn');
+  const btn=document.getElementById('pd-btn');
+  if(!warn||!btn) return;
+  const dateStr=pdPicked();
+  if(!dateStr){
+    warn.textContent='⚠️ Invalid date — check the day/month combination.';
+    btn.style.opacity='.35'; btn.style.pointerEvents='none'; return;
+  }
+  if(dateStr>td()){
+    warn.textContent='⚠️ Cannot log a future date.';
+    btn.style.opacity='.35'; btn.style.pointerEvents='none'; return;
+  }
+  warn.textContent=getE(dateStr)?'⚠️ This day already has an entry — starting will overwrite it.':'';
+  btn.style.opacity='1'; btn.style.pointerEvents='';
 }
 
 function startPastQ(){
-  const inp=document.getElementById('past-date-inp');
-  if(!inp||!inp.value) return;
-  startQ(inp.value);
+  const dateStr=pdPicked();
+  if(!dateStr||dateStr>td()) return;
+  startQ(dateStr);
 }
 
 /* ══════════════════════════════════════
@@ -1016,7 +1063,8 @@ function tHeatmap(all){
         click=`style="cursor:pointer" onclick="showDetail('${d}')"`;
       }
       s+=`<rect x="${x}" y="${y}" width="${cs}" height="${cs}" rx="5" fill="${fill}" ${click}/>`;
-      if(e&&e.period) s+=`<circle cx="${x+cs-5}" cy="${y+5}" r="4" fill="#f9a8d4"/>`;
+      if(e&&e.period)       s+=`<circle cx="${x+cs-5}" cy="${y+5}"    r="4" fill="#f9a8d4"/>`;
+      if(e&&e.night_sweats) s+=`<circle cx="${x+5}"    cy="${y+cs-5}" r="4" fill="#93c5fd"/>`;
     }
   }
   s+='</svg>';
@@ -1027,6 +1075,7 @@ function tHeatmap(all){
       ${[['#16a34a','Green'],['#d97706','Amber'],['#dc2626','Red'],['#e7e5e0','No entry']].map(([c,l])=>
         `<span style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)"><span style="width:12px;height:12px;border-radius:3px;background:${c};display:inline-block"></span>${l}</span>`).join('')}
       <span style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)"><span style="width:8px;height:8px;border-radius:50%;background:#f9a8d4;display:inline-block"></span>Period</span>
+      <span style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)"><span style="width:8px;height:8px;border-radius:50%;background:#93c5fd;display:inline-block"></span>Night sweats</span>
     </div>
   </div>`;
 }
